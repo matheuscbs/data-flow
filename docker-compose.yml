@@ -43,13 +43,21 @@ services:
       - kafka
       - zookeeper
     environment:
-      KAFKA_BROKER: "kafka:29092"
-      TOPIC_NAME: "data-topic"
+      KAFKA_BROKER: "kafka:9092"
+      TOPIC_NAME: "spark-etl-topic"
       FTP_URL: "https://people.sc.fsu.edu/~jburkardt/data/csv/hw_200.csv"
       API_URL: "https://jsonplaceholder.typicode.com/posts"
       WIKI_URL: "https://en.wikipedia.org/wiki/List_of_programming_languages"
+    volumes:
+      - ./app:/app
+      - ./logs:/var/log
     networks:
       - kafka-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200m"
+        max-file: "10"
 
   kafka:
     image: confluentinc/cp-kafka:6.0.0

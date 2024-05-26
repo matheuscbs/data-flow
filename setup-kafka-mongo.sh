@@ -6,9 +6,23 @@ MONGO_URI="mongodb://mongo:27017"
 TOPIC_NAME="spark-etl-topic"
 CONNECT_URI="http://connect:8083"
 
+# Instalação de dependências necessárias
+apt-get update && apt-get install -y curl docker.io
+
+# Função para verificar a existência de um conector
+check_connector_existence() {
+    local connector_name=$1
+    local check_response=$(curl -s -o /dev/null -w "%{http_code}" "$CONNECT_URI/connectors/$connector_name")
+    if [ "$check_response" -eq 200 ]; then
+        echo "1"  # Conector existe
+    else
+        echo "0"  # Conector não existe
+    fi
+}
+
 # Função para verificar a resposta do Kafka Connect
 check_response() {
-    if [ "$1" -eq 201 ]; then
+    if [ "$1" -eq 201 ] || [ "$1" -eq 200 ]; then
         echo "Conector configurado com sucesso."
     else
         echo "Falha ao configurar o conector. Resposta HTTP: $1"
@@ -17,6 +31,33 @@ check_response() {
         exit 1
     fi
 }
+
+# Função para esperar o Kafka Connect ficar disponível
+wait_for_kafka_connect() {
+    echo "Aguardando o Kafka Connect em $CONNECT_URI ficar disponível..."
+    max_attempts=30
+    wait_time=10
+    attempt=1
+    while [ $attempt -le $max_attempts ]; do
+        RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" "$CONNECT_URI/")
+        if [ "$RESPONSE" -eq 200 ]; then
+            echo "Kafka Connect disponível!"
+            break
+        else
+            echo "Tentativa $attempt de $max_attempts falhou: Kafka Connect não está disponível (Resposta HTTP: $RESPONSE). Tentando novamente em $wait_time segundos..."
+            sleep $wait_time
+        fi
+        ((attempt++))
+    done
+
+    if [ $attempt -gt $max_attempts ]; then
+        echo "Falha ao conectar ao Kafka Connect após $max_attempts tentativas."
+        exit 1
+    fi
+}
+
+# Aguarda Kafka Connect estar disponível
+wait_for_kafka_connect
 
 # Verificando a conectividade com o Kafka Connect
 echo "Verificando a conectividade com o Kafka Connect em $CONNECT_URI"
@@ -40,30 +81,43 @@ fi
 
 echo "Tópico Kafka criado com sucesso."
 
-# Configuração do Conector MongoDB Source
-SOURCE_JSON_DATA=$(cat <<EOF
+# # Configuração do Conector MongoDB Source
+# SOURCE_JSON_DATA=$(cat <<EOF
+# {
+#   "name": "mongo-source",
+#   "config": {
+#     "connector.class": "io.debezium.connector.mongodb.MongoDbConnector",
+#     "tasks.max": "1",
+#     "mongodb.connection.string": "$MONGO_URI",
+#     "topic.prefix": "mongo",
+#     "mongodb.name": "power",
+#     "database.whitelist": "power",
+#     "collection.whitelist": "energy",
+#     "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+#     "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+#     "value.converter.schemas.enable": "false"
+#   }
+# }
+# EOF
+# )
+
+# Prepare JSON data for connector source configuration
+SINK_JSON_DATA=$(cat <<EOF
 {
-  "name": "mongo-source",
+  "name": "mongo-sink",
   "config": {
-    "connector.class": "io.debezium.connector.mongodb.MongoDbConnector",
-    "tasks.max": "1",
-    "mongodb.connection.string": "$MONGO_URI",
-    "topic.prefix": "mongo",
-    "mongodb.name": "power",
-    "database.whitelist": "power",
-    "collection.whitelist": "energy",
+    "connector.class": "com.mongodb.kafka.connect.MongoSinkConnector",
+    "topics": "$TOPIC_NAME",
+    "connection.uri": "$MONGO_URI",
     "key.converter": "org.apache.kafka.connect.storage.StringConverter",
     "value.converter": "org.apache.kafka.connect.json.JsonConverter",
-    "value.converter.schemas.enable": "false"
+    "value.converter.schemas.enable": false,
+    "database": "power",
+    "collection": "energy"
   }
 }
 EOF
 )
-
-# Enviando configuração do conector Source
-# echo "Configurando o Conector Kafka Connect Source para MongoDB"
-# RESPONSE=$(curl -s -o response.txt -w "%{http_code}" -X POST -H "Content-Type: application/json" --data "$SOURCE_JSON_DATA" "$CONNECT_URI/connectors")
-# check_response $RESPONSE response.txt
 
 # Configuração do Conector HDFS Sink
 HDFS_JSON_DATA=$(cat <<EOF
@@ -84,30 +138,19 @@ HDFS_JSON_DATA=$(cat <<EOF
 EOF
 )
 
-# Enviando configuração do conector HDFS Sink
-# echo "Configurando o Conector HDFS Sink no Kafka Connect"
-# HDFS_RESPONSE=$(curl -s -o hdfs_response.txt -w "%{http_code}" -X POST -H "Content-Type: application/json" --data "$HDFS_JSON_DATA" "$CONNECT_URI/connectors")
-# check_response $HDFS_RESPONSE hdfs_response.txt
-
-# Prepare JSON data for connector source configuration
-SINK_JSON_DATA=$(cat <<EOF
-{
-  "name": "mongo-sink",
-  "config": {
-    "connector.class": "com.mongodb.kafka.connect.MongoSinkConnector",
-    "topics": "$TOPIC_NAME",
-    "connection.uri": "$MONGO_URI",
-    "key.converter": "org.apache.kafka.connect.storage.StringConverter",
-    "value.converter": "org.apache.kafka.connect.json.JsonConverter",
-    "value.converter.schemas.enable": false,
-    "database": "power",
-    "collection": "energy"
-  }
-}
-EOF
+# Configuração e envio de conectores
+declare -A connectors=(
+    # ["mongo-source"]="$SOURCE_JSON_DATA"
+    ["hdfs-sink"]="$HDFS_JSON_DATA"
+    ["mongo-sink"]="$SINK_JSON_DATA"
 )
 
-# Enviando configuração do conector Mongo Sink
-echo "Configurando o Conector Mongo Sink no Kafka Connect"
-SINK_RESPONSE=$(curl -s -o mongo_sink.txt -w "%{http_code}" -X POST -H "Content-Type: application/json" --data "$SINK_JSON_DATA" "$CONNECT_URI/connectors")
-check_response $SINK_RESPONSE mongo_sink.txt
+for connector_name in "${!connectors[@]}"; do
+    if [ "$(check_connector_existence $connector_name)" -eq "0" ]; then
+        echo "Configurando o Conector $connector_name no Kafka Connect"
+        RESPONSE=$(curl -s -o response.txt -w "%{http_code}" -X POST -H "Content-Type: application/json" --data "${connectors[$connector_name]}" "$CONNECT_URI/connectors")
+        check_response $RESPONSE response.txt
+    else
+        echo "Conector $connector_name já existe, pulando a configuração."
+    fi
+done
