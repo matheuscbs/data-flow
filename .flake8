@@ -1,0 +1,15 @@
+[flake8]
+# Número máximo de caracteres por linha
+max-line-length = 120
+# Excluir alguns diretórios da verificação
+exclude =
+    .git,
+    __pycache__,
+    old,
+    build,
+    dist
+# Ignorar algumas regras de estilo
+ignore = E203, E266, W503, F403, F401, E302, E501, E305
+# Configurações específicas de complexidade
+max-complexity = 18
+select = B,C,E,F,W,T4,B9

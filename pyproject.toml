@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "data-flow"
+version = "0.1.0"
+description = ""
+authors = ["Matheus Cardoso <matheuscbsmsn1994@gmail.com>"]
+readme = "README.md"
+packages = [{include = "data_flow"}]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+pyspark = "^3.5.1"
+requests = "^2.31.0"
+pandas = "^2.2.2"
+beautifulsoup4 = "^4.12.3"
+kafka-python = "^2.0.2"
+python-dotenv = "^1.0.1"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
