@@ -25,6 +25,16 @@ TOPIC_NAME = os.getenv("TOPIC_NAME", "data-topic")
 FTP_URL = os.getenv("FTP_URL")
 API_URL = os.getenv("API_URL")
 WIKI_URL = os.getenv("WIKI_URL")
+PYSPARK_PYTHON = os.getenv("PYSPARK_PYTHON", "/Users/matheuscbs/.pyenv/versions/3.9.18/bin/python")
+PYSPARK_DRIVER_PYTHON = os.getenv("PYSPARK_DRIVER_PYTHON", "/Users/matheuscbs/.pyenv/versions/3.9.18/bin/python")
+
+# Define o mesmo Python para o driver e os workers
+os.environ['PYSPARK_PYTHON'] = PYSPARK_PYTHON
+os.environ['PYSPARK_DRIVER_PYTHON'] = PYSPARK_DRIVER_PYTHON
+
+spark = SparkSession.builder \
+    .appName("Data Extraction and Kafka Example") \
+    .getOrCreate()
 
 print(f"Using Kafka broker at {KAFKA_BROKER}")
 
@@ -43,9 +53,6 @@ session = requests.Session()
 retries = Retry(total=5, backoff_factor=0.1, status_forcelist=[500, 502, 503, 504])
 session.mount('http://', HTTPAdapter(max_retries=retries))
 session.mount('https://', HTTPAdapter(max_retries=retries))
-
-# Inicializa a sessão Spark
-spark = SparkSession.builder.appName("Data Extraction and Kafka Example").getOrCreate()
 
 # Configurar o produtor Kafka
 try:
