@@ -20,6 +20,16 @@ check_connector_existence() {
     fi
 }
 
+# Função para verificar a existência de um tópico Kafka
+check_topic_existence() {
+    local topic_name=$1
+    if docker exec kafka kafka-topics --list --topic $topic_name --zookeeper zookeeper:2181 | grep -q $topic_name; then
+        echo "1"  # Tópico existe
+    else
+        echo "0"  # Tópico não existe
+    fi
+}
+
 # Função para verificar a resposta do Kafka Connect
 check_response() {
     if [ "$1" -eq 201 ] || [ "$1" -eq 200 ]; then
@@ -27,7 +37,7 @@ check_response() {
     else
         echo "Falha ao configurar o conector. Resposta HTTP: $1"
         echo "Detalhes do erro:"
-        cat $2
+        cat response.txt
         exit 1
     fi
 }
@@ -36,7 +46,7 @@ check_response() {
 wait_for_kafka_connect() {
     echo "Aguardando o Kafka Connect em $CONNECT_URI ficar disponível..."
     max_attempts=30
-    wait_time=10
+    wait_time=1  # Inicia com 1 segundo
     attempt=1
     while [ $attempt -le $max_attempts ]; do
         RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" "$CONNECT_URI/")
@@ -46,6 +56,7 @@ wait_for_kafka_connect() {
         else
             echo "Tentativa $attempt de $max_attempts falhou: Kafka Connect não está disponível (Resposta HTTP: $RESPONSE). Tentando novamente em $wait_time segundos..."
             sleep $wait_time
+            ((wait_time*=2))  # Dobrar o tempo de espera para o próximo ciclo
         fi
         ((attempt++))
     done
@@ -59,27 +70,18 @@ wait_for_kafka_connect() {
 # Aguarda Kafka Connect estar disponível
 wait_for_kafka_connect
 
-# Verificando a conectividade com o Kafka Connect
-echo "Verificando a conectividade com o Kafka Connect em $CONNECT_URI"
-RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" "$CONNECT_URI/")
-if [ "$RESPONSE" -ne 200 ]; then
-    echo "Não foi possível conectar ao Kafka Connect em $CONNECT_URI. Resposta HTTP: $RESPONSE"
-    exit 1
+# Verificando a existência do tópico Kafka e criando se necessário
+if [ "$(check_topic_existence $TOPIC_NAME)" -eq "0" ]; then
+    echo "Criando tópico Kafka: $TOPIC_NAME"
+    docker exec kafka kafka-topics --create --topic $TOPIC_NAME --partitions 3 --replication-factor 1 --if-not-exists --zookeeper zookeeper:2181
+    if [ $? -ne 0 ]; then
+        echo "Falha ao criar o tópico Kafka."
+        exit 1
+    fi
+    echo "Tópico Kafka criado com sucesso."
+else
+    echo "Tópico Kafka já existe, pulando a criação."
 fi
-
-echo "Conectividade com o Kafka Connect verificada."
-
-# Criando o tópico Kafka
-echo "Criando tópico Kafka: $TOPIC_NAME"
-docker exec kafka kafka-topics --create --topic $TOPIC_NAME --partitions 3 --replication-factor 1 --if-not-exists --zookeeper zookeeper:2181
-
-# Verificando o resultado da criação do tópico
-if [ $? -ne 0 ]; then
-    echo "Falha ao criar o tópico Kafka."
-    exit 1
-fi
-
-echo "Tópico Kafka criado com sucesso."
 
 # # Configuração do Conector MongoDB Source
 # SOURCE_JSON_DATA=$(cat <<EOF
@@ -140,7 +142,6 @@ EOF
 
 # Configuração e envio de conectores
 declare -A connectors=(
-    # ["mongo-source"]="$SOURCE_JSON_DATA"
     ["hdfs-sink"]="$HDFS_JSON_DATA"
     ["mongo-sink"]="$SINK_JSON_DATA"
 )
