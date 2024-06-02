@@ -11,78 +11,78 @@ apt-get update && apt-get install -y curl docker.io
 
 # Função para verificar a existência de um conector
 check_connector_existence() {
-    local connector_name=$1
-    local check_response=$(curl -s -o /dev/null -w "%{http_code}" "$CONNECT_URI/connectors/$connector_name")
-    if [ "$check_response" -eq 200 ]; then
-        echo "1"  # Conector existe
-    else
-        echo "0"  # Conector não existe
-    fi
+  local connector_name=$1
+  local check_response=$(curl -s -o /dev/null -w "%{http_code}" "$CONNECT_URI/connectors/$connector_name")
+  if [ "$check_response" -eq 200 ]; then
+    echo "1" # Conector existe
+  else
+    echo "0" # Conector não existe
+  fi
 }
 
 # Função para verificar a existência de um tópico Kafka
 check_topic_existence() {
-    local topic_name=$1
-    local check_response=$(curl -s -o /dev/null -w "%{http_code}" "$CONNECT_URI/connectors/$topic_name")
-    if [ "$check_response" -eq 200 ]; then
-        echo "1"  # Tópico existe
-    else
-        echo "0"  # Tópico não existe
-    fi
+  local topic_name=$1
+  local check_response=$(curl -s "http://kafka:29092/topics" | grep -c "\"$topic_name\"")
+  if [ "$check_response" -eq 1 ]; then
+    echo "1" # Tópico existe
+  else
+    echo "0" # Tópico não existe
+  fi
 }
 
 # Função para verificar a resposta do Kafka Connect
 check_response() {
-    if [ "$1" -eq 201 ] || [ "$1" -eq 200 ]; then
-        echo "Conector configurado com sucesso."
-    else
-        echo "Falha ao configurar o conector. Resposta HTTP: $1"
-        echo "Detalhes do erro:"
-        cat response.txt
-        exit 1
-    fi
+  if [ "$1" -eq 201 ] || [ "$1" -eq 200 ]; then
+    echo "Conector configurado com sucesso."
+  else
+    echo "Falha ao configurar o conector. Resposta HTTP: $1"
+    echo "Detalhes do erro:"
+    cat response.txt
+    exit 1
+  fi
 }
 
 # Função para esperar o Kafka Connect ficar disponível
 wait_for_kafka_connect() {
-    echo "Aguardando o Kafka Connect em $CONNECT_URI ficar disponível..."
-    max_attempts=30
-    wait_time=1  # Inicia com 1 segundo
-    attempt=1
-    while [ $attempt -le $max_attempts ]; do
-        RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" "$CONNECT_URI/")
-        if [ "$RESPONSE" -eq 200 ]; then
-            echo "Kafka Connect disponível!"
-            break
-        else
-            echo "Tentativa $attempt de $max_attempts falhou: Kafka Connect não está disponível (Resposta HTTP: $RESPONSE). Tentando novamente em $wait_time segundos..."
-            sleep $wait_time
-            ((wait_time*=2))  # Dobrar o tempo de espera para o próximo ciclo
-        fi
-        ((attempt++))
-    done
-
-    if [ $attempt -gt $max_attempts ]; then
-        echo "Falha ao conectar ao Kafka Connect após $max_attempts tentativas."
-        exit 1
+  echo "Aguardando o Kafka Connect em $CONNECT_URI ficar disponível..."
+  max_attempts=30
+  wait_time=10 # Inicia com 1 segundo
+  attempt=1
+  while [ $attempt -le $max_attempts ]; do
+    RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" "$CONNECT_URI/")
+    if [ "$RESPONSE" -eq 200 ]; then
+      echo "Kafka Connect disponível!"
+      break
+    else
+      echo "Tentativa $attempt de $max_attempts falhou: Kafka Connect não está disponível (Resposta HTTP: $RESPONSE). Tentando novamente em $wait_time segundos..."
+      sleep $wait_time
+      ((wait_time*=2)) # Dobrar o tempo de espera para o próximo ciclo
     fi
+    ((attempt++))
+  done
+
+  if [ $attempt -gt $max_attempts ]; then
+    echo "Falha ao conectar ao Kafka Connect após $max_attempts tentativas."
+    exit 1
+  fi
 }
 
-# Aguarda Kafka Connect estar disponível
-wait_for_kafka_connect
-
-# Verificando a existência do tópico Kafka e criando se necessário
-if [ "$(check_topic_existence $TOPIC_NAME)" -eq "0" ]; then
-    echo "Criando tópico Kafka: $TOPIC_NAME"
-    docker exec kafka kafka-topics --create --topic $TOPIC_NAME --partitions 3 --replication-factor 1 --if-not-exists --zookeeper zookeeper:2181
-    if [ $? -ne 0 ]; then
-        echo "Falha ao criar o tópico Kafka."
-        exit 1
+check_and_create_topic() {
+    echo "Verificando a existência do tópico Kafka: $TOPIC_NAME"
+    if ! docker exec kafka kafka-topics --zookeeper zookeeper:2181 --list | grep -qw $TOPIC_NAME; then
+        echo "Tópico $TOPIC_NAME não existe. Criando tópico..."
+        docker exec kafka kafka-topics --create --topic $TOPIC_NAME --partitions 3 --replication-factor 1 --if-not-exists --zookeeper zookeeper:2181
+        if [ $? -ne 0 ]; then
+            echo "Falha ao criar o tópico Kafka."
+            exit 1
+        else
+            echo "Tópico Kafka criado com sucesso."
+        fi
+    else
+        echo "Tópico $TOPIC_NAME já existe, pulando a criação."
     fi
-    echo "Tópico Kafka criado com sucesso."
-else
-    echo "Tópico Kafka já existe, pulando a criação."
-fi
+}
 
 # # Configuração do Conector MongoDB Source
 # SOURCE_JSON_DATA=$(cat <<EOF
@@ -147,12 +147,21 @@ declare -A connectors=(
     ["mongo-sink"]="$SINK_JSON_DATA"
 )
 
-for connector_name in "${!connectors[@]}"; do
-    if [ "$(check_connector_existence $connector_name)" -eq "0" ]; then
+configure_connectors() {
+    for connector_name in "${!connectors[@]}"; do
         echo "Configurando o Conector $connector_name no Kafka Connect"
         RESPONSE=$(curl -s -o response.txt -w "%{http_code}" -X POST -H "Content-Type: application/json" --data "${connectors[$connector_name]}" "$CONNECT_URI/connectors")
-        check_response $RESPONSE response.txt
-    else
-        echo "Conector $connector_name já existe, pulando a configuração."
-    fi
-done
+        if [ "$(check_connector_existence $connector_name)" -eq "0" ]; then
+            echo "Configurando o Conector $connector_name no Kafka Connect"
+            RESPONSE=$(curl -s -o response.txt -w "%{http_code}" -X POST -H "Content-Type: application/json" --data "${connectors[$connector_name]}" "$CONNECT_URI/connectors")
+            check_response $RESPONSE response.txt
+        else
+            echo "Conector $connector_name já existe, pulando a configuração."
+        fi
+    done
+}
+
+# Aguarda Kafka Connect estar disponível
+wait_for_kafka_connect
+check_and_create_topic $TOPIC_NAME
+configure_connectors

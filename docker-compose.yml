@@ -120,6 +120,7 @@ services:
       - mongo
     volumes:
       - ./setup-kafka-mongo.sh:/app/setup-kafka-mongo.sh
+      - /var/run/docker.sock:/var/run/docker.sock
     environment:
       KAFKA_BROKER: "kafka:29092"
       MONGO_URI: "mongodb://mongo:27017"
@@ -153,6 +154,7 @@ services:
       - hadoop_data_namenode:/hadoop/dfs/name
     ports:
       - "9870:9870"
+      - "9000:9000"
     networks:
       - kafka-network
 
