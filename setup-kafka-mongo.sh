@@ -23,7 +23,8 @@ check_connector_existence() {
 # Função para verificar a existência de um tópico Kafka
 check_topic_existence() {
     local topic_name=$1
-    if docker exec kafka kafka-topics --list --topic $topic_name --zookeeper zookeeper:2181 | grep -q $topic_name; then
+    local check_response=$(curl -s -o /dev/null -w "%{http_code}" "$CONNECT_URI/connectors/$topic_name")
+    if [ "$check_response" -eq 200 ]; then
         echo "1"  # Tópico existe
     else
         echo "0"  # Tópico não existe

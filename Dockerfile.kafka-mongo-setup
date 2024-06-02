@@ -1,0 +1,24 @@
+# Usar a imagem oficial do Debian Buster (slim variant for smaller size)
+FROM debian:buster-slim
+
+# Configurações de ambiente para evitar interações durante a instalação
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Instalar dependências básicas e o Docker
+RUN apt-get update && apt-get install -y \
+    curl \
+    docker.io \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Definir o diretório de trabalho
+WORKDIR /app
+
+# Copiar o script de configuração
+COPY setup-kafka-mongo.sh .
+
+# Tornar o script executável
+RUN chmod +x setup-kafka-mongo.sh
+
+# Definir o comando de entrada
+CMD ["/bin/bash", "-c", "/app/setup-kafka-mongo.sh"]

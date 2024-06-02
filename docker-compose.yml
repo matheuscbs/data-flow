@@ -11,54 +11,6 @@ services:
     networks:
       - kafka-network
 
-  setup-kafka-mongo:
-    image: debian:buster-slim
-    container_name: setup-kafka-mongo
-    depends_on:
-      - kafka-connect
-      - kafka
-      - zookeeper
-      - mongo
-    volumes:
-      - ./setup-kafka-mongo.sh:/setup-kafka-mongo.sh
-      - /var/run/docker.sock:/var/run/docker.sock
-    environment:
-      KAFKA_BROKER: "kafka:29092"
-      MONGO_URI: "mongodb://mongo:27017"
-      TOPIC_NAME: "spark-etl-topic"
-      CONNECT_URI: "http://connect:8083"
-    command: >
-      /bin/bash -c "chmod +x /setup-kafka-mongo.sh &&
-                    sleep 10 &&
-                    /setup-kafka-mongo.sh"
-    networks:
-      - kafka-network
-
-  data-flow:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: data-flow
-    depends_on:
-      - kafka
-      - zookeeper
-    environment:
-      KAFKA_BROKER: "kafka:9092"
-      TOPIC_NAME: "spark-etl-topic"
-      FTP_URL: "https://people.sc.fsu.edu/~jburkardt/data/csv/hw_200.csv"
-      API_URL: "https://jsonplaceholder.typicode.com/posts"
-      WIKI_URL: "https://en.wikipedia.org/wiki/List_of_programming_languages"
-    volumes:
-      - ./app:/app
-      - ./logs:/var/log
-    networks:
-      - kafka-network
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "200m"
-        max-file: "10"
-
   kafka:
     image: confluentinc/cp-kafka:6.0.0
     container_name: kafka
@@ -73,6 +25,8 @@ services:
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_SUPERUSERS: User:admin
+      KAFKA_ALLOW_EMPTY_ACLS: true
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
       KAFKA_CONFLUENT_LICENSE_TOPIC_REPLICATION_FACTOR: 1
@@ -80,46 +34,6 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_JMX_PORT: 9101
-    networks:
-      - kafka-network
-
-  kafka-connect:
-    image: cnfldemos/cp-server-connect-datagen:0.4.0-6.0.0
-    hostname: connect
-    container_name: kafka-connect
-    depends_on:
-      - kafka
-      - mongo
-      - hadoop
-    ports:
-      - "8083:8083"
-    environment:
-      CONNECT_BOOTSTRAP_SERVERS: "kafka:29092"
-      CONNECT_REST_ADVERTISED_HOST_NAME: connect
-      CONNECT_REST_PORT: 8083
-      CONNECT_GROUP_ID: compose-connect-group
-      CONNECT_CONFIG_STORAGE_TOPIC: docker-connect-configs
-      CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: 1
-      CONNECT_OFFSET_STORAGE_TOPIC: docker-connect-offsets
-      CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: 1
-      CONNECT_STATUS_STORAGE_TOPIC: docker-connect-status
-      CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: 1
-      CONNECT_KEY_CONVERTER: org.apache.kafka.connect.storage.StringConverter
-      CONNECT_VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
-      CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE: "false"
-      CONNECT_PLUGIN_PATH: "/usr/share/java,/usr/share/confluent-hub-components"
-    command:
-      - bash
-      - -c
-      - |
-        echo "Installing MongoDB connector Source"
-        confluent-hub install --no-prompt debezium/debezium-connector-mongodb:latest
-        echo "Installing MongoDB Sink connector"
-        confluent-hub install --no-prompt mongodb/kafka-connect-mongodb:latest
-        echo "Installing HDFS Connector"
-        confluent-hub install --no-prompt confluentinc/kafka-connect-hdfs:latest
-        echo "Starting Kafka Connect"
-        /etc/confluent/docker/run
     networks:
       - kafka-network
 
@@ -147,6 +61,74 @@ services:
       CONFLUENT_METRICS_REPORTER_TOPIC_REPLICAS: 1
       CONFLUENT_METRICS_ENABLE: "true"
       CONFLUENT_SUPPORT_CUSTOMER_ID: "anonymous"
+    networks:
+      - kafka-network
+
+  kafka-connect:
+    image: cnfldemos/cp-server-connect-datagen:0.4.0-6.0.0
+    hostname: connect
+    container_name: kafka-connect
+    depends_on:
+      - kafka
+      - mongo
+      - hadoop
+    ports:
+      - "8083:8083"
+    environment:
+      CONNECT_BOOTSTRAP_SERVERS: "kafka:29092"
+      CONNECT_REST_ADVERTISED_HOST_NAME: connect
+      CONNECT_REST_PORT: 8083
+      CONNECT_GROUP_ID: compose-connect-group
+      CONNECT_PRODUCER_CONFIG: SASL_MECHANISM=PLAIN
+      CONNECT_CONSUMER_CONFIG: SASL_MECHANISM=PLAIN
+      CONNECT_USER: kafka_user
+      CONNECT_PASSWORD: kafka_password
+      CONNECT_CONFIG_STORAGE_TOPIC: docker-connect-configs
+      CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_OFFSET_STORAGE_TOPIC: docker-connect-offsets
+      CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_STATUS_STORAGE_TOPIC: docker-connect-status
+      CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_KEY_CONVERTER: org.apache.kafka.connect.storage.StringConverter
+      CONNECT_VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE: "false"
+      CONNECT_PLUGIN_PATH: "/usr/share/java,/usr/share/confluent-hub-components"
+    command:
+      - bash
+      - -c
+      - |
+        echo "Installing MongoDB connector Source"
+        confluent-hub install --no-prompt debezium/debezium-connector-mongodb:latest
+        echo "Installing MongoDB Sink connector"
+        confluent-hub install --no-prompt mongodb/kafka-connect-mongodb:latest
+        echo "Installing HDFS Connector"
+        confluent-hub install --no-prompt confluentinc/kafka-connect-hdfs:latest
+        echo "Starting Kafka Connect"
+        /etc/confluent/docker/run
+    networks:
+      - kafka-network
+
+  setup-kafka-mongo:
+    build:
+      context: .
+      dockerfile: Dockerfile.kafka-mongo-setup
+    container_name: setup-kafka-mongo
+    depends_on:
+      - kafka-connect
+      - kafka
+      - zookeeper
+      - mongo
+    volumes:
+      - ./setup-kafka-mongo.sh:/app/setup-kafka-mongo.sh
+    environment:
+      KAFKA_BROKER: "kafka:29092"
+      MONGO_URI: "mongodb://mongo:27017"
+      TOPIC_NAME: "spark-etl-topic"
+      CONNECT_URI: "http://connect:8083"
+    command: >
+      /bin/bash -c "chmod +x /app/setup-kafka-mongo.sh &&
+                    sleep 10 &&
+                    /app/setup-kafka-mongo.sh"
     networks:
       - kafka-network
 
@@ -189,6 +171,33 @@ services:
       - "7077:7077"
     networks:
       - kafka-network
+
+  data-flow:
+    build:
+      context: .
+      dockerfile: Dockerfile.data-flow
+    container_name: data-flow
+    depends_on:
+      - kafka
+      - zookeeper
+    environment:
+      KAFKA_BROKER: "kafka:9092"
+      TOPIC_NAME: "spark-etl-topic"
+      FTP_URL: "https://people.sc.fsu.edu/~jburkardt/data/csv/hw_200.csv"
+      API_URL: "https://jsonplaceholder.typicode.com/posts"
+      WIKI_URL: "https://en.wikipedia.org/wiki/List_of_programming_languages"
+      PYSPARK_PYTHON: "/usr/local/bin/python"
+      PYSPARK_DRIVER_PYTHON: "/usr/local/bin/python"
+    volumes:
+      - ./app:/app
+      - ./logs:/var/log
+    networks:
+      - kafka-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200m"
+        max-file: "10"
 
 networks:
   kafka-network:

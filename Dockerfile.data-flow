@@ -1,0 +1,45 @@
+# Usar a imagem oficial do Python 3.9-slim
+FROM python:3.9-slim
+
+# Instalar dependências básicas e o build essentials para compilação de bibliotecas Python
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libssl-dev \
+    zlib1g-dev \
+    libbz2-dev \
+    libreadline-dev \
+    libsqlite3-dev \
+    wget \
+    curl \
+    ca-certificates \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Instalar Poetry
+RUN curl -sSL https://install.python-poetry.org | python3 - \
+    && ln -s /root/.local/bin/poetry /usr/local/bin/poetry
+
+# Definir o diretório de trabalho
+WORKDIR /app
+
+# Copiar o pyproject.toml e poetry.lock* para o diretório de trabalho
+COPY pyproject.toml poetry.lock* ./
+
+# Copiar o código fonte antes da instalação do Poetry
+COPY data_flow /app/data_flow
+
+# Copiar o resto do código fonte para o container
+COPY . .
+
+# Instalar dependências do projeto usando Poetry
+RUN poetry install --no-interaction --no-ansi
+
+# Instalar cron e configurar o trabalho cron
+RUN apt-get update && apt-get install -y cron \
+    && mkdir -p /etc/cron.d \
+    && echo "* * * * * cd /app && poetry run python data_flow/etl.py >> /var/log/cron.log 2>&1" > /etc/cron.d/etl-cron \
+    && chmod 0644 /etc/cron.d/etl-cron \
+    && touch /var/log/cron.log
+
+# Inicia o cron junto com o container
+CMD ["cron", "-f"]
