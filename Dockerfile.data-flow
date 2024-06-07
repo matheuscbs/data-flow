@@ -1,7 +1,7 @@
 # Usar a imagem oficial do Python 3.9-slim
 FROM python:3.9-slim
 
-# Instalar dependências básicas e o build essentials para compilação de bibliotecas Python
+# Instalar dependências necessárias
 RUN apt-get update && apt-get install -y \
     build-essential \
     libssl-dev \
@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y \
     curl \
     ca-certificates \
     git \
+    cron \
     && rm -rf /var/lib/apt/lists/*
 
 # Instalar Poetry
@@ -22,24 +23,17 @@ RUN curl -sSL https://install.python-poetry.org | python3 - \
 # Definir o diretório de trabalho
 WORKDIR /app
 
-# Copiar o pyproject.toml e poetry.lock* para o diretório de trabalho
-COPY pyproject.toml poetry.lock* ./
-
-# Copiar o código fonte antes da instalação do Poetry
-COPY data_flow /app/data_flow
-
-# Copiar o resto do código fonte para o container
-COPY . .
+# Copiar os arquivos do projeto para o contêiner
+COPY . /app
 
 # Instalar dependências do projeto usando Poetry
-RUN poetry install --no-interaction --no-ansi
+RUN poetry config virtualenvs.create false \
+    && poetry install --no-interaction --no-ansi
 
-# Instalar cron e configurar o trabalho cron
-RUN apt-get update && apt-get install -y cron \
-    && mkdir -p /etc/cron.d \
-    && echo "* * * * * cd /app && poetry run python data_flow/etl.py >> /var/log/cron.log 2>&1" > /etc/cron.d/etl-cron \
+# Configurar e iniciar cronjob
+RUN echo "* * * * * root cd /app && poetry run python data_flow/etl.py >> /var/log/cron.log 2>&1" > /etc/cron.d/etl-cron \
     && chmod 0644 /etc/cron.d/etl-cron \
-    && touch /var/log/cron.log
+    && touch /var/log/cron.log \
+    && chmod 0666 /var/log/cron.log
 
-# Inicia o cron junto com o container
 CMD ["cron", "-f"]

@@ -42,11 +42,14 @@ services:
     hostname: control-center
     container_name: kafka-connect-control-center
     depends_on:
+      - kafka
       - kafka-connect
+      - zookeeper
     ports:
       - "9021:9021"
     environment:
       CONTROL_CENTER_BOOTSTRAP_SERVERS: "kafka:29092"
+      CONTROL_CENTER_ZOOKEEPER_CONNECT: "zookeeper:2181"
       CONTROL_CENTER_CONNECT_CLUSTER: "connect:8083"
       CONTROL_CENTER_REPLICATION_FACTOR: 1
       CONTROL_CENTER_INTERNAL_TOPICS_PARTITIONS: 1
