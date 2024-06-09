@@ -1,7 +1,7 @@
 # Usar a imagem oficial do Python 3.9-slim
 FROM python:3.9-slim
 
-# Instalar dependências necessárias
+# Instalar dependências necessárias, incluindo Java e utilitários necessários
 RUN apt-get update && apt-get install -y \
     build-essential \
     libssl-dev \
@@ -13,27 +13,31 @@ RUN apt-get update && apt-get install -y \
     curl \
     ca-certificates \
     git \
-    cron \
+    default-jdk \
+    procps \
     && rm -rf /var/lib/apt/lists/*
 
-# Instalar Poetry
-RUN curl -sSL https://install.python-poetry.org | python3 - \
-    && ln -s /root/.local/bin/poetry /usr/local/bin/poetry
+# Verificar a instalação do Java e configurar JAVA_HOME
+RUN java -version && \
+    echo "JAVA_HOME=$(dirname $(dirname $(readlink -f $(which java))))" >> /etc/environment
 
 # Definir o diretório de trabalho
 WORKDIR /app
 
+# Instalar Poetry usando pip
+RUN pip install poetry
+
+# Configurar Poetry para não criar ambientes virtuais
+RUN poetry config virtualenvs.create false
+
+# Copiar os arquivos de configuração do Poetry primeiro para melhor aproveitamento do cache
+COPY app/pyproject.toml app/poetry.lock app/poetry.toml ./
+
 # Copiar os arquivos do projeto para o contêiner
-COPY . /app
+COPY app/data_flow ./data_flow
 
 # Instalar dependências do projeto usando Poetry
-RUN poetry config virtualenvs.create false \
-    && poetry install --no-interaction --no-ansi
+RUN poetry install --no-interaction --no-ansi
 
-# Configurar e iniciar cronjob
-RUN echo "* * * * * root cd /app && poetry run python data_flow/etl.py >> /var/log/cron.log 2>&1" > /etc/cron.d/etl-cron \
-    && chmod 0644 /etc/cron.d/etl-cron \
-    && touch /var/log/cron.log \
-    && chmod 0666 /var/log/cron.log
-
-CMD ["cron", "-f"]
+# Comando para executar o aplicativo
+CMD ["poetry", "run", "python", "data_flow/etl.py"]
