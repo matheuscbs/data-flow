@@ -130,7 +130,7 @@ HDFS_JSON_DATA=$(cat <<EOF
     "connector.class": "io.confluent.connect.hdfs.HdfsSinkConnector",
     "tasks.max": "3",
     "topics": "$TOPIC_NAME",
-    "hdfs.url": "hdfs://hadoop-namenode:9000",
+    "hdfs.url": "hdfs://hadoop-namenode:8020",
     "flush.size": "100",
     "rotate.interval.ms": "1000",
     "key.converter": "org.apache.kafka.connect.storage.StringConverter",
