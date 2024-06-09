@@ -35,13 +35,32 @@ To run this project on your local machine, follow these steps:
 2. Clone the repository to your local machine.
 3. Navigate to the project directory.
 4. Configure the `.env` file with the necessary environment variables.
-5. Run the following command to build and start all the services:
+5. Modify the `docker-compose.yml` file to ensure the environment variables and network settings are correctly set up:
+   - Kafka and Zookeeper configurations should match your network and resource specifications.
+   - Update the MongoDB URI and Kafka configurations to align with your local or development environment needs.
+   - Confirm that the ports specified do not conflict with your existing applications.
+6. Run the following command to build and start all the services:
    ```bash
    docker-compose up --build
    ```
-6. Monitor the logs to ensure that all services are running correctly.
+   7- Monitor the logs to ensure that all services are running correctly.
 
 The Docker containers will include all the necessary dependencies and environment required to run the application, ensuring consistency across different development and production environments.
+
+## Configuration Details
+
+# Docker Compose Variables
+
+Here are some key environment variables used in docker-compose.yml that you might need to adjust depending on your setup:
+
+- KAFKA_BROKER_ID, KAFKA_ZOOKEEPER_CONNECT: Ensure these are consistent with your Kafka cluster configuration.
+- MONGO_URI: Update this to point to your MongoDB instance, which may be local or hosted.
+- CONNECT_BOOTSTRAP_SERVERS: This should point to your Kafka bootstrap server.
+  **Important Ports**
+- 9092 & 29092: Kafka broker ports.
+- 2181: Zookeeper port.
+- 27017: MongoDB port.
+- 8080 & 7077: Spark master ports.
 
 ## License
 
