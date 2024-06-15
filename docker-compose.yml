@@ -8,6 +8,9 @@ services:
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
+      ZOOKEEPER_SYNC_LIMIT: 5
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper
     networks:
       - kafka-network
 
@@ -34,8 +37,19 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_JMX_PORT: 9101
+      KAFKA_NUM_NETWORK_THREADS: 3
+      KAFKA_NUM_IO_THREADS: 8
+      KAFKA_NUM_PARTITIONS: 3
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 2
+    volumes:
+      - kafka_data:/var/lib/kafka
     networks:
       - kafka-network
+    logging:
+      driver: json-file
+      options:
+        max-size: "200m"
+        max-file: "10"
 
   control-center:
     image: confluentinc/cp-enterprise-control-center:6.0.0
@@ -64,6 +78,8 @@ services:
       CONFLUENT_METRICS_REPORTER_TOPIC_REPLICAS: 1
       CONFLUENT_METRICS_ENABLE: "true"
       CONFLUENT_SUPPORT_CUSTOMER_ID: "anonymous"
+    volumes:
+      - control_center_data:/var/lib/confluent-control-center
     networks:
       - kafka-network
 
@@ -109,6 +125,8 @@ services:
         confluent-hub install --no-prompt confluentinc/kafka-connect-hdfs:latest
         echo "Starting Kafka Connect"
         /etc/confluent/docker/run
+    volumes:
+      - kafka_connect_data:/usr/share/java
     networks:
       - kafka-network
 
@@ -176,6 +194,8 @@ services:
     ports:
       - "8080:8080"
       - "7077:7077"
+    volumes:
+      - spark_data:/bitnami/spark
     networks:
       - kafka-network
 
@@ -212,7 +232,17 @@ networks:
     driver: bridge
 
 volumes:
+  zookeeper_data:
+    driver: local
+  kafka_data:
+    driver: local
   mongo_data:
     driver: local
   hadoop_data_namenode:
+    driver: local
+  kafka_connect_data:
+    driver: local
+  control_center_data:
+    driver: local
+  spark_data:
     driver: local
