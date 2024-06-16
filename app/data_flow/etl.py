@@ -7,7 +7,7 @@ import time
 
 import schedule
 from kafka import KafkaProducer
-from kafka.errors import KafkaError
+from kafka.errors import KafkaError, NoBrokersAvailable
 from pyspark.sql import SparkSession
 
 # Configuração do diretório e arquivo de log
@@ -25,12 +25,31 @@ TOPIC_NAME = "data-topic"
 os.environ['PYSPARK_PYTHON'] = "/usr/local/bin/python"
 os.environ['PYSPARK_DRIVER_PYTHON'] = "/usr/local/bin/python"
 
-# Cria e retorna um produtor Kafka.
-producer = KafkaProducer(bootstrap_servers=[KAFKA_BROKER], value_serializer=lambda x: json.dumps(x).encode('utf-8'))
+# Criação do Spark Session e Kafka Producer fora do escopo das funções
 spark = SparkSession.builder.appName("Data Extraction and Kafka Example").getOrCreate()
+producer = None
+
+def create_kafka_producer():
+    global producer
+    max_attempts = 5
+    wait_time = 1
+    for attempt in range(max_attempts):
+        try:
+            producer = KafkaProducer(bootstrap_servers=[KAFKA_BROKER], value_serializer=lambda x: json.dumps(x).encode('utf-8'))
+            logging.info("Kafka producer created successfully.")
+            break
+        except NoBrokersAvailable as e:
+            logging.error(f"Attempt {attempt+1} failed: NoBrokersAvailable with this error {e}. Retrying in {wait_time} seconds...")
+            time.sleep(wait_time)
+            wait_time *= 2
+        if attempt == max_attempts - 1:
+            logging.error("Failed to create Kafka producer after several attempts.")
+            sys.exit(1)
 
 def send_data_to_kafka(data, topic):
-    """ Envia dados para o Kafka. """
+    global producer
+    if producer is None:
+        create_kafka_producer()
     for record in data:
         try:
             producer.send(topic, value=record).get(timeout=10)
@@ -39,20 +58,22 @@ def send_data_to_kafka(data, topic):
             logging.error(f"Failed to send data to Kafka: {e}")
 
 def job():
-    """ Função que define a tarefa agendada. """
     data = [{"id": 1, "name": "Alice", "age": 30}, {"id": 2, "name": "Bob", "age": 25}, {"id": 3, "name": "Charlie", "age": 35}]
     send_data_to_kafka(data, TOPIC_NAME)
 
 def graceful_exit(signal_num, frame):
-    """ Encerra as conexões de forma adequada. """
-    logging.info("Closing Kafka producer and Spark session.")
-    producer.close()
+    global producer
+    if producer:
+        logging.info("Closing Kafka producer.")
+        producer.close()
+    logging.info("Stopping Spark session.")
     spark.stop()
     sys.exit(0)
 
 signal.signal(signal.SIGINT, graceful_exit)
 signal.signal(signal.SIGTERM, graceful_exit)
 
+create_kafka_producer()
 schedule.every(1).minutes.do(job)
 
 while True:
