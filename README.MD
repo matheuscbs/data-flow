@@ -22,12 +22,44 @@ This project, named `data-flow`, is designed to perform data extraction, process
 - **Dockerfile.data-flow**: Dockerfile for setting up the Python environment for the data-flow application.
 - **Dockerfile.kafka-mongo-setup**: Dockerfile for preparing the Kafka and MongoDB setup environment.
 - **setup-kafka-mongo.sh**: Bash script for setting up Kafka topics and configuring MongoDB connectors.
+- **test-e2e.sh**: Bash script for test the pipeline integration.
 
 ## How It Works
 
 The `data-flow` project uses Kafka to stream data continuously, which is processed in real-time by Spark. The data is then stored or further processed in MongoDB based on the defined ETL logic within the `etl.py` script. This setup allows for high throughput and scalable data processing pipelines which are essential for handling large datasets typically used in big data and analytics solutions.
 
-## Running the Project Locally
+## Running the Project
+
+## Prerequisites
+
+Prerequisites
+Ensure you have the following installed on your system:
+
+- **Docker**: For containerization and running the services.
+- **Docker Compose**: For orchestrating the multi-container setup.
+- **Poetry**: For managing Python dependencies (you can install it with pip install poetry).
+
+## Local Execution
+
+1. Activate the Python Environment:
+
+```bash
+poetry env use 3.9.18  # Replace with your Python version if different
+```
+
+2. Install Dependencies:
+
+```bash
+poetry install
+```
+
+3. Run the ETL Script:
+
+```bash
+poetry run python data_flow/etl.py
+```
+
+## Docker Execution
 
 To run this project on your local machine, follow these steps:
 
