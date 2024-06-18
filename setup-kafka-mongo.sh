@@ -2,12 +2,12 @@
 
 # Definições de variáveis
 KAFKA_BROKER="kafka:29092"
-MONGO_URI="mongodb://mongo:27017"
+MONGO_URI="mongodb://admin:admin@mongo:27017"
 TOPIC_NAME="spark-etl-topic"
 CONNECT_URI="http://connect:8083"
 
 # Instalação de dependências necessárias
-apt-get update && apt-get install -y curl docker.io
+apt-get update && apt-get install -y curl jq docker.io
 
 # Função para verificar a existência de um conector
 check_connector_existence() {
@@ -69,40 +69,20 @@ wait_for_kafka_connect() {
 }
 
 check_and_create_topic() {
-    echo "Verificando a existência do tópico Kafka: $TOPIC_NAME"
-    if ! docker exec kafka kafka-topics --zookeeper zookeeper:2181 --list | grep -qw $TOPIC_NAME; then
-        echo "Tópico $TOPIC_NAME não existe. Criando tópico..."
-        docker exec kafka kafka-topics --create --topic $TOPIC_NAME --partitions 3 --replication-factor 1 --if-not-exists --zookeeper zookeeper:2181
-        if [ $? -ne 0 ]; then
-            echo "Falha ao criar o tópico Kafka."
-            exit 1
-        else
-            echo "Tópico Kafka criado com sucesso."
-        fi
+  echo "Verificando a existência do tópico Kafka: $TOPIC_NAME"
+  if ! docker exec kafka kafka-topics --bootstrap-server kafka:29092 --list | grep -qw $TOPIC_NAME; then
+    echo "Tópico $TOPIC_NAME não existe. Criando tópico..."
+    docker exec kafka kafka-topics --create --topic $TOPIC_NAME --partitions 3 --replication-factor 1 --if-not-exists --bootstrap-server kafka:29092
+    if [ $? -ne 0 ]; then
+      echo "Falha ao criar o tópico Kafka."
+      exit 1
     else
-        echo "Tópico $TOPIC_NAME já existe, pulando a criação."
+      echo "Tópico Kafka criado com sucesso."
     fi
+  else
+    echo "Tópico $TOPIC_NAME já existe, pulando a criação."
+  fi
 }
-
-# # Configuração do Conector MongoDB Source
-# SOURCE_JSON_DATA=$(cat <<EOF
-# {
-#   "name": "mongo-source",
-#   "config": {
-#     "connector.class": "io.debezium.connector.mongodb.MongoDbConnector",
-#     "tasks.max": "1",
-#     "mongodb.connection.string": "$MONGO_URI",
-#     "topic.prefix": "mongo",
-#     "mongodb.name": "power",
-#     "database.whitelist": "power",
-#     "collection.whitelist": "energy",
-#     "key.converter": "org.apache.kafka.connect.storage.StringConverter",
-#     "value.converter": "org.apache.kafka.connect.json.JsonConverter",
-#     "value.converter.schemas.enable": "false"
-#   }
-# }
-# EOF
-# )
 
 # Prepare JSON data for connector source configuration
 SINK_JSON_DATA=$(cat <<EOF
@@ -143,25 +123,31 @@ EOF
 
 # Configuração e envio de conectores
 declare -A connectors=(
-    ["hdfs-sink"]="$HDFS_JSON_DATA"
-    ["mongo-sink"]="$SINK_JSON_DATA"
+  ["hdfs-sink"]="$HDFS_JSON_DATA"
+  ["mongo-sink"]="$SINK_JSON_DATA"
 )
 
 configure_connectors() {
-    for connector_name in "${!connectors[@]}"; do
-        echo "Configurando o Conector $connector_name no Kafka Connect"
-        RESPONSE=$(curl -s -o response.txt -w "%{http_code}" -X POST -H "Content-Type: application/json" --data "${connectors[$connector_name]}" "$CONNECT_URI/connectors")
-        if [ "$(check_connector_existence $connector_name)" -eq "0" ]; then
-            echo "Configurando o Conector $connector_name no Kafka Connect"
-            RESPONSE=$(curl -s -o response.txt -w "%{http_code}" -X POST -H "Content-Type: application/json" --data "${connectors[$connector_name]}" "$CONNECT_URI/connectors")
-            check_response $RESPONSE response.txt
-        else
-            echo "Conector $connector_name já existe, pulando a configuração."
-        fi
-    done
+  for connector_name in "${!connectors[@]}"; do
+    echo "Configurando o Conector $connector_name no Kafka Connect"
+    echo "Configuração JSON:"
+    echo "${connectors[$connector_name]}" | jq '.' # Formatar o JSON para melhor legibilidade
+
+    RESPONSE=$(curl -s -o response.txt -w "%{http_code}" -X POST -H "Content-Type: application/json" --data "${connectors[$connector_name]}" "$CONNECT_URI/connectors")
+
+    if [ "$(check_connector_existence $connector_name)" -eq "0" ]; then
+      check_response $RESPONSE response.txt
+    else
+      echo "Conector $connector_name já existe, pulando a configuração."
+    fi
+  done
 }
 
 # Aguarda Kafka Connect estar disponível
 wait_for_kafka_connect
 check_and_create_topic $TOPIC_NAME
 configure_connectors
+
+# Cria o arquivo de flag para indicar que o pipeline de configuração foi concluído
+touch /app/pipeline_complete.flag
+echo "Pipeline de configuração concluída com sucesso." > /app/pipeline_complete.flag
