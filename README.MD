@@ -9,7 +9,7 @@ This project, named `data-flow`, is designed to perform data extraction, process
 - **app/**: Main application folder.
   - **.venv/**: Virtual environment for the project dependencies.
   - **data_flow/**: Contains the ETL scripts and data processing modules.
-    - \***\*init**.py\*\*: Initialization script for the data_flow package.
+    - **\_\_init.py\_\_**: Initialization script for the data_flow package.
     - **etl.py**: Main script for the ETL (Extract, Transform, Load) process.
   - **poetry.lock**: Lock file for Python package dependencies managed by Poetry.
   - **poetry.toml**: Configuration file for Poetry settings.
