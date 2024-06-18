@@ -6,10 +6,13 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # Instalar dependências básicas e o Docker
 RUN apt-get update && apt-get install -y \
-    curl \
-    docker.io \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+  curl \
+  docker.io \
+  netcat \
+  ca-certificates \
+  jq \
+  && rm -rf /var/lib/apt/lists/*
+
 
 # Definir o diretório de trabalho
 WORKDIR /app
