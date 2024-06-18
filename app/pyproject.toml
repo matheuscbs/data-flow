@@ -11,10 +11,10 @@ pyspark = "^3.5.1"
 requests = "^2.31.0"
 pandas = "^2.2.2"
 beautifulsoup4 = "^4.12.3"
-kafka-python = "^2.0.2"
 python-dotenv = "^1.0.1"
 schedule = "^1.2.2"
 pymongo = "^4.7.3"
+kafka-python = "^2.0.2"
 
 [build-system]
 requires = ["poetry-core"]
