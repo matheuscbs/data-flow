@@ -4,6 +4,7 @@
 KAFKA_BROKER="kafka:9092" # Ajustado para o nome do serviço no Docker
 TOPIC_NAME="spark-etl-topic" # Garantindo que está usando o mesmo nome de tópico usado nos outros scripts
 MONGODB_URI="mongodb://admin:admin@mongo:27017" # Ajustado para o nome do serviço no Docker
+HDFS_NAMENODE_URI="hdfs://hadoop-namenode:8020"
 DATABASE_NAME="power"
 COLLECTION_NAME="energy"
 LOG_FILE="data_flow_test.log"
@@ -33,4 +34,16 @@ if [[ -z "$mongo_output" ]]; then
 else
     echo "Dados encontrados no MongoDB:" | tee -a $LOG_FILE
     echo "$mongo_output" | tee -a $LOG_FILE
+fi
+
+## Verificando dados no HDFS
+echo "Verificando dados no HDFS..." | tee -a $LOG_FILE
+hdfs_output=$(docker exec -t hadoop-namenode hdfs dfs -ls /path/to/data | grep "your_data_file")
+
+# Verificar se dados existem no HDFS
+if [[ -z "$hdfs_output" ]]; then
+    echo "Nenhum dado foi encontrado no HDFS." | tee -a $LOG_FILE
+else
+    echo "Dados encontrados no HDFS:" | tee -a $LOG_FILE
+    echo "$hdfs_output" | tee -a $LOG_FILE
 fi
