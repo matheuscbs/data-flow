@@ -151,6 +151,7 @@ services:
     container_name: kafka-connect
     depends_on:
       - kafka
+      - namenode
     ports:
       - "8083:8083"
     restart: always
@@ -159,6 +160,7 @@ services:
       KAFKA_JMX_HOSTNAME: localhost
       CONNECT_BOOTSTRAP_SERVERS: "kafka:29092"
       CONNECT_REST_ADVERTISED_HOST_NAME: connect
+      HDFS_URL: hdfs://namenode:9000
       CONNECT_GROUP_ID: compose-connect-group
       CONNECT_CONFIG_STORAGE_TOPIC: docker-connect-configs
       CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: 1
@@ -255,18 +257,72 @@ services:
             mongod --shutdown &&
             mongod --auth --bind_ip_all"
 
-  hadoop:
+  namenode:
     image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
     hostname: namenode
-    container_name: hadoop-namenode
+    container_name: namenode
+    restart: always
+    ports:
+      - 9870:9870
+      - 9000:9000
     environment:
       - CLUSTER_NAME=test
+      - TERM=xterm
+    env_file:
+      - ./hadoop.env
+    healthcheck:
+      test: ["CMD-SHELL", "hdfs dfsadmin -safemode get | grep -q OFF"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    networks:
+      - kafka-network
+
+  datanode:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: datanode
+    restart: always
     volumes:
-      - hadoop_data_namenode:/hadoop/dfs/name
-    ports:
-      - "9870:9870"
-      - "9000:9000"
-      - "8020:8020"
+      - hadoop_datanode:/hadoop/dfs/data
+    environment:
+      SERVICE_PRECONDITION: "namenode:9870"
+    env_file:
+      - ./hadoop.env
+    networks:
+      - kafka-network
+
+  resourcemanager:
+    image: bde2020/hadoop-resourcemanager:2.0.0-hadoop3.2.1-java8
+    container_name: resourcemanager
+    restart: always
+    environment:
+      SERVICE_PRECONDITION: "namenode:9000 namenode:9870 datanode:9864"
+    env_file:
+      - ./hadoop.env
+    networks:
+      - kafka-network
+
+  nodemanager1:
+    image: bde2020/hadoop-nodemanager:2.0.0-hadoop3.2.1-java8
+    container_name: nodemanager
+    restart: always
+    environment:
+      SERVICE_PRECONDITION: "namenode:9000 namenode:9870 datanode:9864 resourcemanager:8088"
+    env_file:
+      - ./hadoop.env
+    networks:
+      - kafka-network
+
+  historyserver:
+    image: bde2020/hadoop-historyserver:2.0.0-hadoop3.2.1-java8
+    container_name: historyserver
+    restart: always
+    environment:
+      SERVICE_PRECONDITION: "namenode:9000 namenode:9870 datanode:9864 resourcemanager:8088"
+    volumes:
+      - hadoop_historyserver:/hadoop/yarn/timeline
+    env_file:
+      - ./hadoop.env
     networks:
       - kafka-network
 
@@ -298,7 +354,7 @@ services:
       - kafka
       - zookeeper
       - mongo
-      - hadoop
+      - namenode
       - spark
       - setup-kafka-mongo
     environment:
@@ -322,7 +378,9 @@ volumes:
   zookeeper_data:
   kafka_data:
   mongo_data:
-  hadoop_data_namenode:
+  hadoop_namenode:
+  hadoop_datanode:
+  hadoop_historyserver:
   kafka_connect_data:
   control_center_data:
   spark_data:

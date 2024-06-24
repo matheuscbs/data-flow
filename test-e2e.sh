@@ -1,13 +1,14 @@
 #!/bin/bash
 
 # Configurações
-KAFKA_BROKER="kafka:9092" # Ajustado para o nome do serviço no Docker
-TOPIC_NAME="spark-etl-topic" # Garantindo que está usando o mesmo nome de tópico usado nos outros scripts
-MONGODB_URI="mongodb://admin:admin@mongo:27017" # Ajustado para o nome do serviço no Docker
-HDFS_NAMENODE_URI="hdfs://hadoop-namenode:8020"
+KAFKA_BROKER="kafka:9092"
+TOPIC_NAME="spark-etl-topic"
+MONGODB_URI="mongodb://admin:admin@mongo:27017"
+HDFS_NAMENODE_URI="hdfs://namenode:9000"
 DATABASE_NAME="power"
 COLLECTION_NAME="energy"
 LOG_FILE="data_flow_test.log"
+HDFS_DATA_DIR="/user/appuser/data/topics/+tmp/spark-etl-topic/*"
 
 ## Inicializando o arquivo de log
 echo "Iniciando teste de fluxo de dados - $(date)" > $LOG_FILE
@@ -38,12 +39,19 @@ fi
 
 ## Verificando dados no HDFS
 echo "Verificando dados no HDFS..." | tee -a $LOG_FILE
-hdfs_output=$(docker exec -t hadoop-namenode hdfs dfs -ls /path/to/data | grep "your_data_file")
+hdfs_output=$(docker exec -u root -t namenode /opt/hadoop-3.2.1/bin/hdfs dfs -ls $HDFS_DATA_DIR 2>&1)
 
-# Verificar se dados existem no HDFS
-if [[ -z "$hdfs_output" ]]; then
-    echo "Nenhum dado foi encontrado no HDFS." | tee -a $LOG_FILE
+if [ $? -ne 0 ]; then
+  echo "Erro ao listar arquivos no HDFS: $hdfs_output" | tee -a $LOG_FILE
+#   echo "Tentando criar o diretório novamente..."
+#   docker exec -u root -t namenode /opt/hadoop-3.2.1/bin/hdfs dfs -mkdir -p $HDFS_DATA_DIR
+#   docker exec -u root -t namenode /opt/hadoop-3.2.1/bin/hdfs dfs -chown -R appuser:appuser $HDFS_DATA_DIR
 else
-    echo "Dados encontrados no HDFS:" | tee -a $LOG_FILE
-    echo "$hdfs_output" | tee -a $LOG_FILE
+  # Verificar se dados existem no HDFS
+  if [[ -z "$hdfs_output" ]]; then
+      echo "Nenhum dado foi encontrado no HDFS." | tee -a $LOG_FILE
+  else
+      echo "Dados encontrados no HDFS:" | tee -a $LOG_FILE
+      echo "$hdfs_output" | tee -a $LOG_FILE
+  fi
 fi

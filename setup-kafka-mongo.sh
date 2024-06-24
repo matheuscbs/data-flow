@@ -5,6 +5,9 @@ KAFKA_BROKER="kafka:29092"
 MONGO_URI="mongodb://admin:admin@mongo:27017"
 TOPIC_NAME="spark-etl-topic"
 CONNECT_URI="http://connect:8083"
+HDFS_NAMENODE_URI="hdfs://namenode:9000/user/appuser/data"
+DATABASE_NAME="power"
+COLLECTION_NAME="energy"
 
 # Instalação de dependências necessárias
 apt-get update && apt-get install -y curl jq docker.io
@@ -68,6 +71,30 @@ wait_for_kafka_connect() {
   fi
 }
 
+wait_for_hdfs() {
+  echo "Aguardando o HDFS em $HDFS_NAMENODE_URI ficar disponível..."
+  max_attempts=30
+  wait_time=5
+  attempt=1
+
+  while [ $attempt -le $max_attempts ]; do
+    docker exec namenode /opt/hadoop-3.2.1/bin/hdfs dfsadmin -safemode get | grep -q "Safe mode is OFF"
+    if [ $? -eq 0 ]; then
+      echo "HDFS disponível!"
+      break
+    else
+      echo "Tentativa $attempt de $max_attempts falhou: HDFS não está disponível. Tentando novamente em $wait_time segundos..."
+      sleep $wait_time
+    fi
+    ((attempt++))
+  done
+
+  if [ $attempt -gt $max_attempts ]; then
+    echo "Falha ao conectar ao HDFS após $max_attempts tentativas."
+    exit 1
+  fi
+}
+
 check_and_create_topic() {
   echo "Verificando a existência do tópico Kafka: $TOPIC_NAME"
   if ! docker exec kafka kafka-topics --bootstrap-server kafka:29092 --list | grep -qw $TOPIC_NAME; then
@@ -95,8 +122,8 @@ SINK_JSON_DATA=$(cat <<EOF
     "key.converter": "org.apache.kafka.connect.storage.StringConverter",
     "value.converter": "org.apache.kafka.connect.json.JsonConverter",
     "value.converter.schemas.enable": false,
-    "database": "power",
-    "collection": "energy"
+    "database": "$DATABASE_NAME",
+    "collection": "$COLLECTION_NAME"
   }
 }
 EOF
@@ -110,9 +137,10 @@ HDFS_JSON_DATA=$(cat <<EOF
     "connector.class": "io.confluent.connect.hdfs.HdfsSinkConnector",
     "tasks.max": "3",
     "topics": "$TOPIC_NAME",
-    "hdfs.url": "hdfs://hadoop-namenode:8020",
-    "flush.size": "100",
-    "rotate.interval.ms": "1000",
+    "hdfs.url": "$HDFS_NAMENODE_URI",
+    "flush.size": "10",
+    "rotate.interval.ms": "5000",
+    "hdfs.compression.codec": "snappy",
     "key.converter": "org.apache.kafka.connect.storage.StringConverter",
     "value.converter": "org.apache.kafka.connect.json.JsonConverter",
     "value.converter.schemas.enable": "false"
@@ -145,6 +173,7 @@ configure_connectors() {
 
 # Aguarda Kafka Connect estar disponível
 wait_for_kafka_connect
+wait_for_hdfs
 check_and_create_topic $TOPIC_NAME
 configure_connectors
 
