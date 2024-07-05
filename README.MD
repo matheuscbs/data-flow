@@ -28,6 +28,52 @@ This project, named `data-flow`, is designed to perform data extraction, process
 
 The `data-flow` project uses Kafka to stream data continuously, which is processed in real-time by Spark. The data is then stored or further processed in MongoDB based on the defined ETL logic within the `etl.py` script. This setup allows for high throughput and scalable data processing pipelines which are essential for handling large datasets typically used in big data and analytics solutions.
 
+## Project Architecture: Data Flow 📊
+
+[![Arquitetura do Data-Flow](assets/arch.png)](assets/arch.png)
+
+The image above illustrates the data flow in the data-flow project:
+
+1. **Kafka Cluster:**
+
+   - **Kafka:** The core of the system, responsible for receiving and distributing real-time data.
+   - **Zookeeper:** Ensures coordination and proper functioning of the Kafka cluster.
+   - **Kafka Connect:** Enables integration with external systems, such as databases and other services.
+
+2. **Schema Registry:**
+
+   - Stores and manages data schemas, ensuring compatibility between data producers and consumers.
+
+3. **Kafka Ferramentas:**
+
+   - **Control Center:** Web interface for monitoring and managing Kafka.
+   - **Rest Proxy:** Provides access to Kafka via REST APIs.
+
+4. **Spark Cluster:**
+
+   - **Spark Master:** Coordinates the execution of tasks in the Spark cluster.
+   - **Spark Workers:** Process data in parallel, applying transformations and analyses.
+   - **History Server:** Stores the execution history of Spark tasks.
+
+5. **MongoDB:**
+
+   - Flexible NoSQL database used to store data processed by Spark.
+
+6. **Hadoop Cluster:**
+   - **HDFS (Hadoop Distributed File System):** Distributed file system for storing large volumes of data.
+   - **Hadoop Namenode:** Manages the namespace and metadata of HDFS.
+   - **Hadoop Datanodes:** Store HDFS data.
+   - **YARN (Yet Another Resource Negotiator):** Manages cluster resources.
+
+**Fluxo de Dados:**
+
+1. **Dados brutos** is sent to the **Kafka Cluster**.
+2. The **Spark Cluster** reads data from Kafka, processes it, and sends it to **MongoDB**.
+3. Data can also be stored in the **Hadoop Cluster** for batch processing or later analysis.
+4. Processed data in MongoDB can be accessed by applications or end-users.
+
+This architecture ensures robust, scalable, and efficient data processing and storage, leveraging the strengths of Kafka for real-time data streaming, Spark for in-memory processing, and Hadoop for distributed storage.
+
 ## Running the Project
 
 ## Prerequisites
