@@ -134,11 +134,18 @@ Here are some key environment variables used in docker-compose.yml that you migh
 - KAFKA_BROKER_ID, KAFKA_ZOOKEEPER_CONNECT: Ensure these are consistent with your Kafka cluster configuration.
 - MONGO_URI: Update this to point to your MongoDB instance, which may be local or hosted.
 - CONNECT_BOOTSTRAP_SERVERS: This should point to your Kafka bootstrap server.
+
   **Important Ports**
+
 - 9092 & 29092: Kafka broker ports.
 - 2181: Zookeeper port.
 - 27017: MongoDB port.
 - 8080 & 7077: Spark master ports.
+- 8081: Schema Registry port.
+- 9021: Control Center port.
+- 8082: Rest Proxy port.
+- 8083: Kafka Connect port.
+- 9870 & 9000: Namenode ports.
 
 ## License
 
